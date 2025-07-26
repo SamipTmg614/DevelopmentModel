@@ -8,8 +8,8 @@ import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler
 import pickle
 import os
-
 import sys
+import importlib
 
 # Add src directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -61,6 +61,10 @@ st.markdown("""
 def load_model_and_data():
     """Load and cache the model and data"""
     try:
+        # Clear any import cache to ensure we get the latest version
+        if 'developmentmodel' in sys.modules:
+            importlib.reload(sys.modules['developmentmodel'])
+        
         # Try different file paths for deployment
         possible_paths = [
             "./data/final/merged_cleaned_dataset.csv",
@@ -96,8 +100,13 @@ def load_model_and_data():
             y_index_train, y_index_test = y_index.iloc[train_idx], y_index.iloc[test_idx]
             y_tier_train, y_tier_test = y_tier.iloc[train_idx], y_tier.iloc[test_idx]
             
-            # Train model on fold
-            fold_model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+            # Train model on fold - Test with default n_clusters first
+            try:
+                fold_model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+            except TypeError as e:
+                st.error(f"Error creating model with n_clusters: {e}")
+                fold_model = RegionalDevelopmentModel()  # Fall back to default
+                
             fold_model.train(X_train, y_index_train, y_tier_train)
             
             # Evaluate on test set
@@ -115,7 +124,12 @@ def load_model_and_data():
             cv_metrics['silhouette_scores'].append(silhouette_score(X_test, cluster_labels))
         
         # Train final model on full dataset for feature importance and predictions
-        model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+        try:
+            model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+        except TypeError as e:
+            st.error(f"Error creating final model with n_clusters: {e}")
+            model = RegionalDevelopmentModel()  # Fall back to default
+            
         model.train(X_scaled, y_index, y_tier)
         
         # Get feature importance
@@ -131,18 +145,24 @@ def main():
     st.markdown('<h1 class="main-header">🏘️ Regional Development Analysis System</h1>', unsafe_allow_html=True)
     st.markdown("### AI-Powered Development Index Prediction & Classification")
     
+    # Add cache clearing button in sidebar
+    st.sidebar.title("Navigation")
+    if st.sidebar.button("🔄 Clear Cache & Reload"):
+        st.cache_data.clear()  # Clear all cached data
+        st.rerun()  # Rerun the app
+    
     # Load model and data
     model, X_scaled, y_index, y_tier, df, feature_names, importance_df, cv_metrics = load_model_and_data()
     
     if model is None:
         st.error("Failed to load model and data. Please check your data files.")
+        st.info("Try clicking the '🔄 Clear Cache & Reload' button in the sidebar.")
         return
     
     # Sidebar navigation
-    st.sidebar.title("Navigation")
     page = st.sidebar.selectbox(
         "Select Page",
-        ["🏠 Home", "📊 Model Performance", "🔮 Make Predictions", "📈 Feature Analysis", "� Search Areas", "�🗺️ Regional Insights"]
+        ["🏠 Home", "📊 Model Performance", "🔮 Make Predictions", "📈 Feature Analysis", "🔍 Search Areas", "🗺️ Regional Insights"]
     )
     
     if page == "🏠 Home":
@@ -157,10 +177,10 @@ def main():
     elif page == "📈 Feature Analysis":
         show_feature_analysis(importance_df, df)
     
-    elif page == "� Search Areas":
+    elif page == "🔍 Search Areas":
         show_search_areas(df, model)
     
-    elif page == "�🗺️ Regional Insights":
+    elif page == "🗺️ Regional Insights":
         show_regional_insights(df)
 
 def show_home_page(df, model, X_scaled, y_index, y_tier, cv_metrics):
