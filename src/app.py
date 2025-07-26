@@ -57,88 +57,104 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data
 def load_model_and_data():
-    """Load and cache the model and data"""
-    try:
-        # Clear any import cache to ensure we get the latest version
-        if 'developmentmodel' in sys.modules:
-            importlib.reload(sys.modules['developmentmodel'])
-        
-        # Try different file paths for deployment
-        possible_paths = [
-            "./data/final/merged_cleaned_dataset.csv",
-            "data/final/merged_cleaned_dataset.csv",
-            "../data/final/merged_cleaned_dataset.csv"
-        ]
-        
-        filepath = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                filepath = path
-                break
-        
-        if filepath is None:
-            raise FileNotFoundError("Dataset not found in any expected location")
-            
-        X_scaled, y_index, y_tier, df, feature_names = load_and_preprocess_data(filepath)
-        
-        # Perform cross-validation to get realistic performance metrics
-        from sklearn.model_selection import KFold
-        from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
-        
-        kf = KFold(n_splits=5, shuffle=True, random_state=42)
-        cv_metrics = {
-            'mse_scores': [],
-            'r2_scores': [],
-            'accuracy_scores': [],
-            'silhouette_scores': []
-        }
-        
-        for train_idx, test_idx in kf.split(X_scaled):
-            X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
-            y_index_train, y_index_test = y_index.iloc[train_idx], y_index.iloc[test_idx]
-            y_tier_train, y_tier_test = y_tier.iloc[train_idx], y_tier.iloc[test_idx]
-            
-            # Train model on fold - Test with default n_clusters first
-            try:
-                fold_model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
-            except TypeError as e:
-                st.error(f"Error creating model with n_clusters: {e}")
-                fold_model = RegionalDevelopmentModel()  # Fall back to default
-                
-            fold_model.train(X_train, y_index_train, y_tier_train)
-            
-            # Evaluate on test set
-            y_pred_index = fold_model.regressor.predict(X_test)
-            y_pred_tier = fold_model.classifier.predict(X_test)
-            
-            # Calculate metrics
-            cv_metrics['mse_scores'].append(mean_squared_error(y_index_test, y_pred_index))
-            cv_metrics['r2_scores'].append(r2_score(y_index_test, y_pred_index))
-            cv_metrics['accuracy_scores'].append(accuracy_score(y_tier_test, y_pred_tier))
-            
-            # Silhouette score for clustering
-            from sklearn.metrics import silhouette_score
-            cluster_labels = fold_model.clusterer.predict(X_test)
-            cv_metrics['silhouette_scores'].append(silhouette_score(X_test, cluster_labels))
-        
-        # Train final model on full dataset for feature importance and predictions
+    """Load and cache the model and data using session state"""
+    # Use session state for caching instead of @st.cache_data
+    if 'model_loaded' not in st.session_state:
         try:
-            model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
-        except TypeError as e:
-            st.error(f"Error creating final model with n_clusters: {e}")
-            model = RegionalDevelopmentModel()  # Fall back to default
+            # Clear any import cache to ensure we get the latest version
+            if 'developmentmodel' in sys.modules:
+                importlib.reload(sys.modules['developmentmodel'])
             
-        model.train(X_scaled, y_index, y_tier)
-        
-        # Get feature importance
-        importance_df = model.get_feature_importance(feature_names)
-        
-        return model, X_scaled, y_index, y_tier, df, feature_names, importance_df, cv_metrics
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return None, None, None, None, None, None, None, None
+            # Try different file paths for deployment
+            possible_paths = [
+                "./data/final/merged_cleaned_dataset.csv",
+                "data/final/merged_cleaned_dataset.csv",
+                "../data/final/merged_cleaned_dataset.csv"
+            ]
+            
+            filepath = None
+            for path in possible_paths:
+                if os.path.exists(path):
+                    filepath = path
+                    break
+            
+            if filepath is None:
+                raise FileNotFoundError("Dataset not found in any expected location")
+                
+            X_scaled, y_index, y_tier, df, feature_names = load_and_preprocess_data(filepath)
+            
+            # Perform cross-validation to get realistic performance metrics
+            from sklearn.model_selection import KFold
+            from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
+            
+            kf = KFold(n_splits=5, shuffle=True, random_state=42)
+            cv_metrics = {
+                'mse_scores': [],
+                'r2_scores': [],
+                'accuracy_scores': [],
+                'silhouette_scores': []
+            }
+            
+            for train_idx, test_idx in kf.split(X_scaled):
+                X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
+                y_index_train, y_index_test = y_index.iloc[train_idx], y_index.iloc[test_idx]
+                y_tier_train, y_tier_test = y_tier.iloc[train_idx], y_tier.iloc[test_idx]
+                
+                # Train model on fold - Test with default n_clusters first
+                try:
+                    fold_model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+                except TypeError as e:
+                    st.error(f"Error creating model with n_clusters: {e}")
+                    fold_model = RegionalDevelopmentModel()  # Fall back to default
+                    
+                fold_model.train(X_train, y_index_train, y_tier_train)
+                
+                # Evaluate on test set
+                y_pred_index = fold_model.regressor.predict(X_test)
+                y_pred_tier = fold_model.classifier.predict(X_test)
+                
+                # Calculate metrics
+                cv_metrics['mse_scores'].append(mean_squared_error(y_index_test, y_pred_index))
+                cv_metrics['r2_scores'].append(r2_score(y_index_test, y_pred_index))
+                cv_metrics['accuracy_scores'].append(accuracy_score(y_tier_test, y_pred_tier))
+                
+                # Silhouette score for clustering
+                from sklearn.metrics import silhouette_score
+                cluster_labels = fold_model.clusterer.predict(X_test)
+                cv_metrics['silhouette_scores'].append(silhouette_score(X_test, cluster_labels))
+            
+            # Train final model on full dataset for feature importance and predictions
+            try:
+                model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+            except TypeError as e:
+                st.error(f"Error creating final model with n_clusters: {e}")
+                model = RegionalDevelopmentModel()  # Fall back to default
+                
+            model.train(X_scaled, y_index, y_tier)
+            
+            # Get feature importance
+            importance_df = model.get_feature_importance(feature_names)
+            
+            # Store in session state
+            st.session_state.model = model
+            st.session_state.X_scaled = X_scaled
+            st.session_state.y_index = y_index
+            st.session_state.y_tier = y_tier
+            st.session_state.df = df
+            st.session_state.feature_names = feature_names
+            st.session_state.importance_df = importance_df
+            st.session_state.cv_metrics = cv_metrics
+            st.session_state.model_loaded = True
+            
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            return None, None, None, None, None, None, None, None
+    
+    # Return from session state
+    return (st.session_state.model, st.session_state.X_scaled, st.session_state.y_index, 
+            st.session_state.y_tier, st.session_state.df, st.session_state.feature_names, 
+            st.session_state.importance_df, st.session_state.cv_metrics)
 
 def main():
     # Main header
@@ -148,7 +164,9 @@ def main():
     # Add cache clearing button in sidebar
     st.sidebar.title("Navigation")
     if st.sidebar.button("🔄 Clear Cache & Reload"):
-        st.cache_data.clear()  # Clear all cached data
+        # Clear session state instead of cache_data
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()  # Rerun the app
     
     # Load model and data
