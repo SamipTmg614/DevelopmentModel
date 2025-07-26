@@ -79,17 +79,52 @@ def load_model_and_data():
             
         X_scaled, y_index, y_tier, df, feature_names = load_and_preprocess_data(filepath)
         
-        # Train the model
-        model = RegionalDevelopmentModel()
+        # Perform cross-validation to get realistic performance metrics
+        from sklearn.model_selection import KFold
+        from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
+        
+        kf = KFold(n_splits=5, shuffle=True, random_state=42)
+        cv_metrics = {
+            'mse_scores': [],
+            'r2_scores': [],
+            'accuracy_scores': [],
+            'silhouette_scores': []
+        }
+        
+        for train_idx, test_idx in kf.split(X_scaled):
+            X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
+            y_index_train, y_index_test = y_index.iloc[train_idx], y_index.iloc[test_idx]
+            y_tier_train, y_tier_test = y_tier.iloc[train_idx], y_tier.iloc[test_idx]
+            
+            # Train model on fold
+            fold_model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
+            fold_model.train(X_train, y_index_train, y_tier_train)
+            
+            # Evaluate on test set
+            y_pred_index = fold_model.regressor.predict(X_test)
+            y_pred_tier = fold_model.classifier.predict(X_test)
+            
+            # Calculate metrics
+            cv_metrics['mse_scores'].append(mean_squared_error(y_index_test, y_pred_index))
+            cv_metrics['r2_scores'].append(r2_score(y_index_test, y_pred_index))
+            cv_metrics['accuracy_scores'].append(accuracy_score(y_tier_test, y_pred_tier))
+            
+            # Silhouette score for clustering
+            from sklearn.metrics import silhouette_score
+            cluster_labels = fold_model.clusterer.predict(X_test)
+            cv_metrics['silhouette_scores'].append(silhouette_score(X_test, cluster_labels))
+        
+        # Train final model on full dataset for feature importance and predictions
+        model = RegionalDevelopmentModel(n_clusters=4)  # Use optimal K=4
         model.train(X_scaled, y_index, y_tier)
         
         # Get feature importance
         importance_df = model.get_feature_importance(feature_names)
         
-        return model, X_scaled, y_index, y_tier, df, feature_names, importance_df
+        return model, X_scaled, y_index, y_tier, df, feature_names, importance_df, cv_metrics
     except Exception as e:
         st.error(f"Error loading data: {e}")
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
 
 def main():
     # Main header
@@ -97,7 +132,7 @@ def main():
     st.markdown("### AI-Powered Development Index Prediction & Classification")
     
     # Load model and data
-    model, X_scaled, y_index, y_tier, df, feature_names, importance_df = load_model_and_data()
+    model, X_scaled, y_index, y_tier, df, feature_names, importance_df, cv_metrics = load_model_and_data()
     
     if model is None:
         st.error("Failed to load model and data. Please check your data files.")
@@ -111,10 +146,10 @@ def main():
     )
     
     if page == "🏠 Home":
-        show_home_page(df, model, X_scaled, y_index, y_tier)
+        show_home_page(df, model, X_scaled, y_index, y_tier, cv_metrics)
     
     elif page == "📊 Model Performance":
-        show_model_performance(model, X_scaled, y_index, y_tier, feature_names)
+        show_model_performance(model, X_scaled, y_index, y_tier, feature_names, cv_metrics)
     
     elif page == "🔮 Make Predictions":
         show_prediction_page(model, feature_names, df)
@@ -128,7 +163,7 @@ def main():
     elif page == "�🗺️ Regional Insights":
         show_regional_insights(df)
 
-def show_home_page(df, model, X_scaled, y_index, y_tier):
+def show_home_page(df, model, X_scaled, y_index, y_tier, cv_metrics):
     """Home page with overview"""
     st.markdown('<h2 class="sub-header">📋 Project Overview</h2>', unsafe_allow_html=True)
     
@@ -147,7 +182,7 @@ def show_home_page(df, model, X_scaled, y_index, y_tier):
         **🔧 Algorithms Used:**
         - Random Forest Regressor
         - Random Forest Classifier  
-        - K-Means Clustering
+        - K-Means Clustering (K=4, optimized)
         """)
     
     with col2:
@@ -163,51 +198,123 @@ def show_home_page(df, model, X_scaled, y_index, y_tier):
         with col2_3:
             st.metric("Data Quality", "99.1%")
     
-    # Quick performance metrics
-    st.markdown('<h3 class="sub-header">⚡ Model Performance Summary</h3>', unsafe_allow_html=True)
+    # Quick performance metrics from Cross-Validation
+    st.markdown('<h3 class="sub-header">⚡ Model Performance Summary (5-Fold Cross-Validation)</h3>', unsafe_allow_html=True)
     
-    # Calculate quick metrics
-    y_pred = model.regressor.predict(X_scaled)
-    from sklearn.metrics import r2_score, mean_squared_error
-    r2 = r2_score(y_index, y_pred)
-    mse = mean_squared_error(y_index, y_pred)
+    # Use cross-validation metrics instead of training metrics
+    avg_r2 = np.mean(cv_metrics['r2_scores'])
+    avg_mse = np.mean(cv_metrics['mse_scores'])
+    avg_accuracy = np.mean(cv_metrics['accuracy_scores'])
+    avg_silhouette = np.mean(cv_metrics['silhouette_scores'])
     
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("R² Score", f"{r2:.4f}", "98.7% variance explained")
+        st.metric("R² Score", f"{avg_r2:.4f}", f"{avg_r2*100:.1f}% variance explained")
     
     with col2:
-        st.metric("MSE", f"{mse:.4f}", "Very low error")
+        st.metric("MSE", f"{avg_mse:.6f}", "Cross-validated error")
     
     with col3:
-        st.metric("Classification Accuracy", "99%", "Excellent tier prediction")
+        st.metric("Classification Accuracy", f"{avg_accuracy:.3f}", "Realistic performance")
     
     with col4:
-        st.metric("Model Status", "✅ Ready", "Trained and validated")
+        st.metric("Silhouette Score", f"{avg_silhouette:.3f}", "Clustering quality")
 
-def show_model_performance(model, X_scaled, y_index, y_tier, feature_names):
+def show_model_performance(model, X_scaled, y_index, y_tier, feature_names, cv_metrics):
     """Model performance analysis page"""
     st.markdown('<h2 class="sub-header">📊 Model Performance Analysis</h2>', unsafe_allow_html=True)
     
-    # Make predictions
-    y_pred_index = model.regressor.predict(X_scaled)
-    y_pred_tier = model.classifier.predict(X_scaled)
+    # Show Cross-Validation Results
+    st.markdown("### 🔄 Cross-Validation Results (5-Fold)")
+    st.info("**Note:** These metrics are from 5-fold cross-validation, showing realistic model performance on unseen data.")
     
-    # Performance metrics
-    from sklearn.metrics import r2_score, mean_squared_error, classification_report, accuracy_score
-    
+    # Performance metrics from CV
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("### 📈 Regression Performance")
-        r2 = r2_score(y_index, y_pred_index)
-        mse = mean_squared_error(y_index, y_pred_index)
+        avg_r2 = np.mean(cv_metrics['r2_scores'])
+        avg_mse = np.mean(cv_metrics['mse_scores'])
+        std_r2 = np.std(cv_metrics['r2_scores'])
+        std_mse = np.std(cv_metrics['mse_scores'])
         
-        st.metric("R² Score", f"{r2:.4f}")
-        st.metric("Mean Squared Error", f"{mse:.6f}")
+        st.metric("Average R² Score", f"{avg_r2:.4f}", f"±{std_r2:.4f}")
+        st.metric("Average MSE", f"{avg_mse:.6f}", f"±{std_mse:.6f}")
         
-        # Actual vs Predicted plot
+        # Plot CV R² scores
+        fig, ax = plt.subplots(figsize=(8, 6))
+        folds = range(1, 6)
+        ax.plot(folds, cv_metrics['r2_scores'], 'bo-', linewidth=2, markersize=8)
+        ax.axhline(y=avg_r2, color='red', linestyle='--', label=f'Average: {avg_r2:.4f}')
+        ax.set_xlabel('Fold Number')
+        ax.set_ylabel('R² Score')
+        ax.set_title('Cross-Validation R² Scores')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim([min(cv_metrics['r2_scores']) - 0.01, max(cv_metrics['r2_scores']) + 0.01])
+        st.pyplot(fig)
+    
+    with col2:
+        st.markdown("### 🎯 Classification Performance")
+        avg_accuracy = np.mean(cv_metrics['accuracy_scores'])
+        std_accuracy = np.std(cv_metrics['accuracy_scores'])
+        
+        st.metric("Average Accuracy", f"{avg_accuracy:.4f}", f"±{std_accuracy:.4f}")
+        
+        # Plot CV accuracy scores
+        fig, ax = plt.subplots(figsize=(8, 6))
+        folds = range(1, 6)
+        ax.plot(folds, cv_metrics['accuracy_scores'], 'go-', linewidth=2, markersize=8)
+        ax.axhline(y=avg_accuracy, color='red', linestyle='--', label=f'Average: {avg_accuracy:.4f}')
+        ax.set_xlabel('Fold Number')
+        ax.set_ylabel('Accuracy')
+        ax.set_title('Cross-Validation Accuracy Scores')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        ax.set_ylim([min(cv_metrics['accuracy_scores']) - 0.01, max(cv_metrics['accuracy_scores']) + 0.01])
+        st.pyplot(fig)
+    
+    # Clustering Performance
+    st.markdown("### 🔗 Clustering Performance")
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        avg_silhouette = np.mean(cv_metrics['silhouette_scores'])
+        std_silhouette = np.std(cv_metrics['silhouette_scores'])
+        st.metric("Average Silhouette Score", f"{avg_silhouette:.4f}", f"±{std_silhouette:.4f}")
+    
+    with col4:
+        st.info("**Silhouette Score Interpretation:**\n"
+                "- 0.7-1.0: Strong clustering\n"
+                "- 0.5-0.7: Reasonable clustering\n"
+                "- 0.25-0.5: Weak clustering\n"
+                "- Below 0.25: Poor clustering")
+    
+    # Show individual fold results in an expandable section
+    with st.expander("📋 Detailed Cross-Validation Results by Fold"):
+        cv_results_df = pd.DataFrame({
+            'Fold': range(1, 6),
+            'R² Score': cv_metrics['r2_scores'],
+            'MSE': cv_metrics['mse_scores'],
+            'Accuracy': cv_metrics['accuracy_scores'],
+            'Silhouette': cv_metrics['silhouette_scores']
+        })
+        st.dataframe(cv_results_df.round(6))
+    
+    # Training Data Visualization (for reference only)
+    st.markdown("### 📊 Training Data Visualization (Reference Only)")
+    st.warning("**Note:** The plots below show the model's fit to the training data and are for visualization purposes only. "
+               "The actual performance metrics above are from cross-validation on unseen data.")
+    
+    # Make predictions on training data for visualization
+    y_pred_index = model.regressor.predict(X_scaled)
+    y_pred_tier = model.classifier.predict(X_scaled)
+    
+    col5, col6 = st.columns(2)
+    
+    with col5:
+        # Actual vs Predicted plot on training data
         fig, ax = plt.subplots(figsize=(8, 6))
         ax.scatter(y_index, y_pred_index, alpha=0.6, color='blue', s=20)
         min_val = min(min(y_index), min(y_pred_index))
@@ -215,17 +322,14 @@ def show_model_performance(model, X_scaled, y_index, y_tier, feature_names):
         ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2, label='Perfect Prediction')
         ax.set_xlabel('Actual Development Index')
         ax.set_ylabel('Predicted Development Index')
-        ax.set_title(f'Actual vs Predicted\nR² = {r2:.4f}')
+        ax.set_title('Training Data: Actual vs Predicted\n(For visualization only)')
         ax.legend()
         ax.grid(True, alpha=0.3)
         st.pyplot(fig)
     
-    with col2:
-        st.markdown("### 🎯 Classification Performance")
-        accuracy = accuracy_score(y_tier, y_pred_tier)
-        st.metric("Accuracy", f"{accuracy:.4f}")
-        
-        # Classification report
+    with col6:
+        # Classification report on training data
+        from sklearn.metrics import classification_report
         report = classification_report(y_tier, y_pred_tier, output_dict=True)
         report_df = pd.DataFrame(report).transpose()
         st.dataframe(report_df.round(4))
