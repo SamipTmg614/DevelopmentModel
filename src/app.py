@@ -106,7 +106,7 @@ def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.selectbox(
         "Select Page",
-        ["🏠 Home", "📊 Model Performance", "🔮 Make Predictions", "📈 Feature Analysis", "🗺️ Regional Insights"]
+        ["🏠 Home", "📊 Model Performance", "🔮 Make Predictions", "📈 Feature Analysis", "� Search Areas", "�🗺️ Regional Insights"]
     )
     
     if page == "🏠 Home":
@@ -121,7 +121,10 @@ def main():
     elif page == "📈 Feature Analysis":
         show_feature_analysis(importance_df, df)
     
-    elif page == "🗺️ Regional Insights":
+    elif page == "� Search Areas":
+        show_search_areas(df, model)
+    
+    elif page == "�🗺️ Regional Insights":
         show_regional_insights(df)
 
 def show_home_page(df, model, X_scaled, y_index, y_tier):
@@ -452,6 +455,272 @@ def show_feature_analysis(importance_df, df):
         st.write(f"🎓 Education: {len(education_features)} features")
         st.write(f"🏥 Health: {len(health_features)} features")
         st.write(f"🚗 Access: {len(access_features)} features")
+
+def show_search_areas(df, model):
+    """Search and explore specific areas"""
+    st.markdown('<h2 class="sub-header">🔍 Search Regional Areas</h2>', unsafe_allow_html=True)
+    
+    # Search functionality
+    st.markdown("### 🔎 Find Specific Areas")
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        search_term = st.text_input(
+            "Enter area name to search:",
+            placeholder="e.g., Kathmandu, Pokhara, Dharan...",
+            help="Search is case-insensitive and supports partial matches"
+        )
+    
+    with col2:
+        search_button = st.button("🔍 Search", type="primary")
+    
+    # Advanced search options
+    with st.expander("🔧 Advanced Search Options"):
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            tier_filter = st.selectbox(
+                "Filter by Development Tier:",
+                ["All", "High", "Medium", "Low"]
+            )
+        
+        with col2:
+            min_index = st.number_input(
+                "Minimum Development Index:",
+                min_value=0.0,
+                max_value=float(df['Development_Index'].max()),
+                value=0.0,
+                step=0.1,
+                format="%.2f"
+            )
+        
+        with col3:
+            max_index = st.number_input(
+                "Maximum Development Index:",
+                min_value=0.0,
+                max_value=float(df['Development_Index'].max()),
+                value=float(df['Development_Index'].max()),
+                step=0.1,
+                format="%.2f"
+            )
+    
+    # Filter data based on search criteria
+    filtered_df = df.copy()
+    
+    # Apply tier filter
+    if tier_filter != "All":
+        filtered_df = filtered_df[filtered_df['Development_Tier'] == tier_filter]
+    
+    # Apply index range filter
+    filtered_df = filtered_df[
+        (filtered_df['Development_Index'] >= min_index) & 
+        (filtered_df['Development_Index'] <= max_index)
+    ]
+    
+    # Apply text search
+    if search_term:
+        # Case-insensitive search
+        mask = filtered_df['Area'].str.contains(search_term, case=False, na=False)
+        filtered_df = filtered_df[mask]
+    
+    # Display results
+    if len(filtered_df) > 0:
+        st.markdown(f"### 📋 Search Results ({len(filtered_df)} areas found)")
+        
+        # Summary statistics for search results
+        if len(filtered_df) > 1:
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Areas Found", len(filtered_df))
+            
+            with col2:
+                avg_index = filtered_df['Development_Index'].mean()
+                st.metric("Avg Dev. Index", f"{avg_index:.4f}")
+            
+            with col3:
+                tier_mode = filtered_df['Development_Tier'].mode()
+                if len(tier_mode) > 0:
+                    st.metric("Most Common Tier", tier_mode.iloc[0])
+            
+            with col4:
+                top_area = filtered_df.loc[filtered_df['Development_Index'].idxmax(), 'Area']
+                st.metric("Highest Developed", top_area[:15] + "..." if len(top_area) > 15 else top_area)
+        
+        # Detailed results table
+        st.markdown("### 📊 Detailed Area Information")
+        
+        # Select columns to display
+        display_columns = [
+            'Area', 'Development_Index', 'Development_Tier', 'Total_Wards',
+            'Health_Access', 'Education_Access', 'Infrastructure_Score',
+            'access to doctor in 30 mins', 'access to firebrigade in 30 mins'
+        ]
+        
+        # Ensure columns exist in dataframe
+        available_columns = [col for col in display_columns if col in filtered_df.columns]
+        
+        # Create display dataframe
+        display_df = filtered_df[available_columns].copy()
+        display_df = display_df.sort_values('Development_Index', ascending=False)
+        
+        # Round numerical columns
+        numeric_columns = display_df.select_dtypes(include=[np.number]).columns
+        display_df[numeric_columns] = display_df[numeric_columns].round(4)
+        
+        # Display with pagination for large results
+        if len(display_df) > 20:
+            st.info(f"Showing top 20 results out of {len(display_df)} total matches. Use filters to narrow down results.")
+            display_df = display_df.head(20)
+        
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Detailed view for single area selection
+        if len(filtered_df) <= 10:  # Only show detailed view for small result sets
+            st.markdown("### 🔍 Detailed Area Analysis")
+            
+            selected_area = st.selectbox(
+                "Select an area for detailed analysis:",
+                options=filtered_df['Area'].tolist(),
+                key="area_selector"
+            )
+            
+            if selected_area:
+                show_area_details(filtered_df, selected_area, model)
+        
+        # Visualization for multiple results
+        if len(filtered_df) > 1:
+            st.markdown("### 📈 Search Results Visualization")
+            
+            tab1, tab2 = st.tabs(["📊 Development Comparison", "🎯 Feature Analysis"])
+            
+            with tab1:
+                # Development index comparison
+                fig = px.bar(
+                    filtered_df.head(15),  # Limit to top 15 for readability
+                    x='Development_Index',
+                    y='Area',
+                    color='Development_Tier',
+                    title='Development Index Comparison',
+                    color_discrete_map={'Low': '#ff7f7f', 'Medium': '#ffb347', 'High': '#87ceeb'},
+                    orientation='h'
+                )
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with tab2:
+                # Feature comparison for selected areas
+                if len(filtered_df) <= 5:
+                    feature_cols = ['Health_Access', 'Education_Access', 'Infrastructure_Score']
+                    available_features = [col for col in feature_cols if col in filtered_df.columns]
+                    
+                    if available_features:
+                        feature_data = filtered_df[['Area'] + available_features].set_index('Area')
+                        
+                        fig = px.bar(
+                            feature_data.T,
+                            title='Feature Comparison Across Selected Areas',
+                            labels={'index': 'Features', 'value': 'Score'}
+                        )
+                        fig.update_layout(height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Select fewer areas (≤5) to see detailed feature comparison.")
+    
+    else:
+        st.warning("🔍 No areas found matching your search criteria. Try:")
+        st.write("- Using partial names (e.g., 'Kath' for Kathmandu)")
+        st.write("- Checking spelling")
+        st.write("- Adjusting the development index range")
+        st.write("- Changing the tier filter")
+        
+        # Show some example areas
+        st.markdown("### 💡 Example Areas You Can Search:")
+        sample_areas = df['Area'].sample(n=min(10, len(df))).tolist()
+        cols = st.columns(2)
+        for i, area in enumerate(sample_areas):
+            with cols[i % 2]:
+                st.write(f"• {area}")
+
+def show_area_details(df, area_name, model):
+    """Show detailed information for a specific area"""
+    area_data = df[df['Area'] == area_name].iloc[0]
+    
+    st.markdown(f"#### 📍 {area_name}")
+    
+    # Key metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        tier_color = {"Low": "🔴", "Medium": "🟡", "High": "🟢"}
+        st.metric(
+            "Development Tier", 
+            f"{tier_color.get(area_data['Development_Tier'], '⚪')} {area_data['Development_Tier']}"
+        )
+    
+    with col2:
+        st.metric("Development Index", f"{area_data['Development_Index']:.4f}")
+    
+    with col3:
+        st.metric("Total Wards", int(area_data['Total_Wards']))
+    
+    with col4:
+        # Calculate rank
+        rank = (df['Development_Index'] > area_data['Development_Index']).sum() + 1
+        st.metric("Development Rank", f"#{rank} of {len(df)}")
+    
+    # Detailed breakdown
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**🏥 Health Infrastructure:**")
+        if 'Health_Access' in area_data:
+            st.write(f"Health Access Score: {area_data['Health_Access']:.4f}")
+        if 'access to doctor in 30 mins' in area_data:
+            st.write(f"Doctor Access (30 min): {area_data['access to doctor in 30 mins']:.1%}")
+        
+        st.markdown("**🚨 Emergency Services:**")
+        if 'access to firebrigade in 30 mins' in area_data:
+            st.write(f"Fire Brigade Access: {area_data['access to firebrigade in 30 mins']:.1%}")
+    
+    with col2:
+        st.markdown("**🏫 Education Infrastructure:**")
+        if 'Education_Access' in area_data:
+            st.write(f"Education Access Score: {area_data['Education_Access']:.4f}")
+        if 'higher education in 30 mins' in area_data:
+            st.write(f"Higher Education Access: {area_data['higher education in 30 mins']:.1%}")
+        
+        st.markdown("**🛣️ Infrastructure:**")
+        if 'Infrastructure_Score' in area_data:
+            st.write(f"Infrastructure Score: {area_data['Infrastructure_Score']:.4f}")
+    
+    # Comparison with averages
+    st.markdown("**📊 Comparison with Regional Averages:**")
+    
+    comparison_metrics = ['Development_Index', 'Health_Access', 'Education_Access', 'Infrastructure_Score']
+    available_metrics = [col for col in comparison_metrics if col in df.columns]
+    
+    if available_metrics:
+        comparison_data = []
+        for metric in available_metrics:
+            area_value = area_data[metric]
+            avg_value = df[metric].mean()
+            difference = area_value - avg_value
+            
+            comparison_data.append({
+                'Metric': metric.replace('_', ' ').title(),
+                'Area Value': f"{area_value:.4f}",
+                'Regional Average': f"{avg_value:.4f}",
+                'Difference': f"{difference:+.4f}",
+                'Status': '🟢 Above Average' if difference > 0 else '🔴 Below Average'
+            })
+        
+        comparison_df = pd.DataFrame(comparison_data)
+        st.dataframe(comparison_df, use_container_width=True, hide_index=True)
 
 def show_regional_insights(df):
     """Regional insights and data exploration"""
