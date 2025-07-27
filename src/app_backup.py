@@ -24,6 +24,55 @@ except ImportError:
     developmentmodel = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(developmentmodel)
     RegionalDevelopmentModel = developmentmodel.RegionalDevelopmentModel
+      with col2:
+        st.markdown("### 🔗 Cluster Analysis")
+        
+        # Get cluster assignments for visualization
+        cluster_labels = model.clusterer.predict(st.session_state.X_scaled)
+        cluster_counts = pd.Series(cluster_labels).value_counts().sort_index()
+        
+        fig = px.pie(
+            values=cluster_counts.values,
+            names=[f"Group {i+1}" for i in cluster_counts.index],
+            title="Regional Cluster Distribution"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Calculate average development index for each cluster
+        st.markdown("**📊 Cluster Development Analysis:**")
+        cluster_dev_analysis = []
+        for cluster_id, count in cluster_counts.items():
+            mask = cluster_labels == cluster_id
+            avg_dev_index = df[mask]['Development_Index'].mean()
+            percentage = (count / len(cluster_labels)) * 100
+            
+            cluster_dev_analysis.append({
+                'Cluster': f"Group {cluster_id + 1}",
+                'Regions': count,
+                'Percentage': f"{percentage:.1f}%",
+                'Avg Dev Index': f"{avg_dev_index:.4f}"
+            })
+        
+        # Sort by average development index to show actual ranking
+        cluster_df = pd.DataFrame(cluster_dev_analysis)
+        cluster_df['Sort Key'] = cluster_df['Avg Dev Index'].astype(float)
+        cluster_df = cluster_df.sort_values('Sort Key', ascending=False)
+        cluster_df = cluster_df.drop('Sort Key', axis=1)
+        
+        st.dataframe(cluster_df, use_container_width=True, hide_index=True)
+        
+        st.info("💡 **Note:** Clusters are ranked by actual average development index, not by group number.")
+
+try:
+    from developmentmodel import RegionalDevelopmentModel, load_and_preprocess_data
+except ImportError:
+    # Try alternative import path for deployment
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("developmentmodel", 
+                                                 os.path.join(os.path.dirname(__file__), "developmentmodel.py"))
+    developmentmodel = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(developmentmodel)
+    RegionalDevelopmentModel = developmentmodel.RegionalDevelopmentModel
     load_and_preprocess_data = developmentmodel.load_and_preprocess_data
 
 # Set page config
@@ -969,30 +1018,9 @@ def show_regional_insights(df, model):
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # Calculate average development index for each cluster
-        st.markdown("**📊 Cluster Development Analysis:**")
-        cluster_dev_analysis = []
         for cluster_id, count in cluster_counts.items():
-            mask = cluster_labels == cluster_id
-            avg_dev_index = df[mask]['Development_Index'].mean()
             percentage = (count / len(cluster_labels)) * 100
-            
-            cluster_dev_analysis.append({
-                'Cluster': f"Group {cluster_id + 1}",
-                'Regions': count,
-                'Percentage': f"{percentage:.1f}%",
-                'Avg Dev Index': f"{avg_dev_index:.4f}"
-            })
-        
-        # Sort by average development index to show actual ranking
-        cluster_df = pd.DataFrame(cluster_dev_analysis)
-        cluster_df['Sort Key'] = cluster_df['Avg Dev Index'].astype(float)
-        cluster_df = cluster_df.sort_values('Sort Key', ascending=False)
-        cluster_df = cluster_df.drop('Sort Key', axis=1)
-        
-        st.dataframe(cluster_df, use_container_width=True, hide_index=True)
-        
-        st.info("💡 **Note:** Clusters are ranked by actual average development index, not by group number.")
+            st.write(f"**Group {cluster_id + 1}**: {count} regions ({percentage:.1f}%)")
     
     # Top and bottom performing regions
     st.markdown("### 🏆 Regional Performance")
