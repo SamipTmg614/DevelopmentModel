@@ -10,10 +10,58 @@ import pickle
 import os
 import sys
 import importlib
-from scipy import stats
 
 # Add src directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from developmentmodel import RegionalDevelopmentModel, load_and_preprocess_data
+except ImportError:
+    # Try alternative import path for deployment
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("developmentmodel", 
+                                                 os.path.join(os.path.dirname(__file__), "developmentmodel.py"))
+    developmentmodel = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(developmentmodel)
+    RegionalDevelopmentModel = developmentmodel.RegionalDevelopmentModel
+      with col2:
+        st.markdown("### 🔗 Cluster Analysis")
+        
+        # Get cluster assignments for visualization
+        cluster_labels = model.clusterer.predict(st.session_state.X_scaled)
+        cluster_counts = pd.Series(cluster_labels).value_counts().sort_index()
+        
+        fig = px.pie(
+            values=cluster_counts.values,
+            names=[f"Group {i+1}" for i in cluster_counts.index],
+            title="Regional Cluster Distribution"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Calculate average development index for each cluster
+        st.markdown("**📊 Cluster Development Analysis:**")
+        cluster_dev_analysis = []
+        for cluster_id, count in cluster_counts.items():
+            mask = cluster_labels == cluster_id
+            avg_dev_index = df[mask]['Development_Index'].mean()
+            percentage = (count / len(cluster_labels)) * 100
+            
+            cluster_dev_analysis.append({
+                'Cluster': f"Group {cluster_id + 1}",
+                'Regions': count,
+                'Percentage': f"{percentage:.1f}%",
+                'Avg Dev Index': f"{avg_dev_index:.4f}"
+            })
+        
+        # Sort by average development index to show actual ranking
+        cluster_df = pd.DataFrame(cluster_dev_analysis)
+        cluster_df['Sort Key'] = cluster_df['Avg Dev Index'].astype(float)
+        cluster_df = cluster_df.sort_values('Sort Key', ascending=False)
+        cluster_df = cluster_df.drop('Sort Key', axis=1)
+        
+        st.dataframe(cluster_df, use_container_width=True, hide_index=True)
+        
+        st.info("💡 **Note:** Clusters are ranked by actual average development index, not by group number.")
 
 try:
     from developmentmodel import RegionalDevelopmentModel, load_and_preprocess_data
@@ -177,7 +225,7 @@ def main():
     # Sidebar navigation
     page = st.sidebar.selectbox(
         "Select Page",
-        ["🏠 Home", "📊 Model Performance", "🎓 Training & Evaluation", "🔮 Make Predictions", "📈 Feature Analysis", "🔍 Search Areas", "🗺️ Regional Insights"]
+        ["🏠 Home", "📊 Model Performance", "🔮 Make Predictions", "📈 Feature Analysis", "🔍 Search Areas", "🗺️ Regional Insights"]
     )
     
     if page == "🏠 Home":
@@ -186,10 +234,7 @@ def main():
     elif page == "📊 Model Performance":
         show_model_performance(model, X_scaled, y_index, feature_names, cv_metrics)
     
-    elif page == "🎓 Training & Evaluation":
-        show_training_evaluation(model, X_scaled, y_index, feature_names, cv_metrics, df)
-    
-    elif page == " Make Predictions":
+    elif page == "🔮 Make Predictions":
         show_prediction_page(model, feature_names, df)
     
     elif page == "📈 Feature Analysis":
@@ -333,858 +378,47 @@ def show_model_performance(model, X_scaled, y_index, feature_names, cv_metrics):
         })
         st.dataframe(cv_results_df.round(6))
     
-    # Enhanced Model Analysis and Insights
-    st.markdown("### 📊 Model Insights & Data Analysis")
-    st.info("**Enhanced Analysis:** The visualizations below provide meaningful insights into model behavior, "
-            "data patterns, and cluster characteristics to help understand model decisions.")
+    # Training Data Visualization (for reference only)
+    st.markdown("### 📊 Training Data Visualization (Reference Only)")
+    st.warning("**Note:** The plots below show the model's fit to the training data and are for visualization purposes only. "
+               "The actual performance metrics above are from cross-validation on unseen data.")
     
-    # Make predictions on training data for analysis
+    # Make predictions on training data for visualization
     y_pred_index = model.regressor.predict(X_scaled)
-    cluster_labels = model.clusterer.predict(X_scaled)
     
-    # Create tabs for different analyses
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Prediction Analysis", "🔍 Cluster Analysis", "📈 Error Analysis", "🗺️ Regional Patterns"])
+    col5, col6 = st.columns(2)
     
-    with tab1:
-        st.markdown("#### Model Prediction Quality Analysis")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Enhanced Actual vs Predicted with color coding by clusters
-            fig, ax = plt.subplots(figsize=(8, 6))
-            
-            # Color points by cluster assignment
-            colors = ['#ff7f7f', '#ffb347', '#87ceeb', '#98fb98']
-            for cluster_id in range(4):
-                mask = cluster_labels == cluster_id
-                if np.sum(mask) > 0:
-                    ax.scatter(y_index[mask], y_pred_index[mask], 
-                             alpha=0.6, color=colors[cluster_id], s=25,
-                             label=f'Group {cluster_id + 1}')
-            
-            # Perfect prediction line
-            min_val = min(min(y_index), min(y_pred_index))
-            max_val = max(max(y_index), max(y_pred_index))
-            ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2, label='Perfect Prediction')
-            
-            ax.set_xlabel('Actual Development Index')
-            ax.set_ylabel('Predicted Development Index')
-            ax.set_title('Prediction Quality by Cluster')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            st.pyplot(fig)
-            
-            # Calculate and display prediction statistics
-            residuals = y_pred_index - y_index
-            st.markdown("**Prediction Statistics:**")
-            st.write(f"• Mean Absolute Error: {np.mean(np.abs(residuals)):.4f}")
-            st.write(f"• Root Mean Square Error: {np.sqrt(np.mean(residuals**2)):.4f}")
-            st.write(f"• Prediction Range: {y_pred_index.min():.4f} - {y_pred_index.max():.4f}")
-        
-        with col2:
-            # Residuals plot
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.scatter(y_pred_index, residuals, alpha=0.6, color='green', s=20)
-            ax.axhline(y=0, color='red', linestyle='--', lw=2, label='Perfect Prediction')
-            ax.set_xlabel('Predicted Development Index')
-            ax.set_ylabel('Residuals (Predicted - Actual)')
-            ax.set_title('Residual Analysis')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            st.pyplot(fig)
-            
-            # Residual statistics
-            st.markdown("**Residual Analysis:**")
-            st.write(f"• Mean Residual: {np.mean(residuals):.6f}")
-            st.write(f"• Residual Std Dev: {np.std(residuals):.4f}")
-            st.write(f"• 95% of predictions within: ±{1.96 * np.std(residuals):.4f}")
+    with col5:
+        # Actual vs Predicted plot on training data
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(y_index, y_pred_index, alpha=0.6, color='blue', s=20)
+        min_val = min(min(y_index), min(y_pred_index))
+        max_val = max(max(y_index), max(y_pred_index))
+        ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2, label='Perfect Prediction')
+        ax.set_xlabel('Actual Development Index')
+        ax.set_ylabel('Predicted Development Index')
+        ax.set_title('Training Data: Actual vs Predicted\n(For visualization only)')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        st.pyplot(fig)
     
-    with tab2:
-        st.markdown("#### Cluster Characteristics Analysis")
-        
-        # Calculate cluster statistics with dynamic ranking
-        cluster_stats = []
-        for cluster_id in range(4):
-            mask = cluster_labels == cluster_id
-            if np.sum(mask) > 0:
-                cluster_actual = y_index[mask]
-                cluster_pred = y_pred_index[mask]
-                
-                cluster_stats.append({
-                    'cluster_id': cluster_id,
-                    'count': np.sum(mask),
-                    'percentage': (np.sum(mask) / len(cluster_labels)) * 100,
-                    'actual_mean': cluster_actual.mean(),
-                    'actual_std': cluster_actual.std(),
-                    'pred_mean': cluster_pred.mean(),
-                    'pred_std': cluster_pred.std(),
-                    'actual_range': (cluster_actual.min(), cluster_actual.max())
-                })
-        
-        # Sort by actual development index for proper ranking
-        cluster_stats.sort(key=lambda x: x['actual_mean'])
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Enhanced cluster distribution with development ranking
-            fig, ax = plt.subplots(figsize=(8, 6))
-            
-            # Create bars with proper development level labels
-            development_levels = ['Low\nDevelopment', 'Medium-Low\nDevelopment', 
-                                'Medium-High\nDevelopment', 'High\nDevelopment']
-            cluster_names = [f"Group {stat['cluster_id'] + 1}" for stat in cluster_stats]
-            counts = [stat['count'] for stat in cluster_stats]
-            means = [stat['actual_mean'] for stat in cluster_stats]
-            
-            bars = ax.bar(development_levels, counts, 
-                         color=['#ff7f7f', '#ffb347', '#87ceeb', '#98fb98'])
-            
-            # Add cluster group labels and counts on bars
-            for i, (bar, count, cluster_name, mean) in enumerate(zip(bars, counts, cluster_names, means)):
-                ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 50, 
-                       f'{cluster_name}\n{count:,} regions\nAvg: {mean:.3f}', 
-                       ha='center', va='bottom', fontsize=9)
-            
-            ax.set_title('Regional Distribution by Development Level')
-            ax.set_xlabel('Development Level (Ranked by Actual Performance)')
-            ax.set_ylabel('Number of Regions')
-            ax.grid(True, alpha=0.3, axis='y')
-            st.pyplot(fig)
-        
-        with col2:
-            # Cluster characteristics table
-            st.markdown("**Cluster Development Analysis:**")
-            
-            cluster_df_data = []
-            for i, stat in enumerate(cluster_stats):
-                level = ['Low', 'Medium-Low', 'Medium-High', 'High'][i]
-                cluster_df_data.append({
-                    'Development Level': level,
-                    'Cluster Group': f"Group {stat['cluster_id'] + 1}",
-                    'Regions': f"{stat['count']:,} ({stat['percentage']:.1f}%)",
-                    'Avg Dev Index': f"{stat['actual_mean']:.4f}",
-                    'Index Range': f"{stat['actual_range'][0]:.3f} - {stat['actual_range'][1]:.3f}",
-                    'Std Deviation': f"±{stat['actual_std']:.4f}"
-                })
-            
-            cluster_df = pd.DataFrame(cluster_df_data)
-            st.dataframe(cluster_df, use_container_width=True, hide_index=True)
-            
-            st.success("💡 **Key Finding:** Cluster numbers don't directly correspond to development levels. "
-                      "The model uses data-driven clustering, which is why dynamic interpretation is crucial.")
-    
-    with tab3:
-        st.markdown("#### Model Error Distribution Analysis")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Error distribution histogram
-            residuals = y_pred_index - y_index
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.hist(residuals, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
-            ax.axvline(x=0, color='red', linestyle='--', lw=2, label='Perfect Prediction')
-            ax.axvline(x=np.mean(residuals), color='green', linestyle='-', lw=2, label=f'Mean Error: {np.mean(residuals):.4f}')
-            ax.set_xlabel('Prediction Error (Predicted - Actual)')
-            ax.set_ylabel('Frequency')
-            ax.set_title('Error Distribution Analysis')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            st.pyplot(fig)
-        
-        with col2:
-            # Error by development level
-            fig, ax = plt.subplots(figsize=(8, 6))
-            
-            error_by_cluster = []
-            cluster_names = []
-            
-            for i, stat in enumerate(cluster_stats):
-                mask = cluster_labels == stat['cluster_id']
-                cluster_residuals = residuals[mask]
-                error_by_cluster.append(cluster_residuals)
-                level = ['Low', 'Medium-Low', 'Medium-High', 'High'][i]
-                cluster_names.append(f"{level}\n(Group {stat['cluster_id'] + 1})")
-            
-            ax.boxplot(error_by_cluster, labels=cluster_names)
-            ax.axhline(y=0, color='red', linestyle='--', lw=1, alpha=0.7)
-            ax.set_title('Prediction Error by Development Level')
-            ax.set_ylabel('Prediction Error')
-            ax.grid(True, alpha=0.3)
-            fig.autofmt_xdate(rotation=45)
-            st.pyplot(fig)
-            
-            # Error statistics by cluster
-            st.markdown("**Error Analysis by Development Level:**")
-            for i, stat in enumerate(cluster_stats):
-                level = ['Low', 'Medium-Low', 'Medium-High', 'High'][i]
-                mask = cluster_labels == stat['cluster_id']
-                cluster_errors = np.abs(residuals[mask])
-                st.write(f"• {level} (Group {stat['cluster_id'] + 1}): "
-                        f"MAE = {np.mean(cluster_errors):.4f}")
-    
-    with tab4:
-        st.markdown("#### Regional Development Patterns")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Development index distribution
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.hist(y_index, bins=50, alpha=0.7, color='lightcoral', edgecolor='black', label='Actual')
-            ax.hist(y_pred_index, bins=50, alpha=0.7, color='lightblue', edgecolor='black', label='Predicted')
-            ax.axvline(x=np.mean(y_index), color='red', linestyle='-', lw=2, label=f'Actual Mean: {np.mean(y_index):.3f}')
-            ax.axvline(x=np.mean(y_pred_index), color='blue', linestyle='-', lw=2, label=f'Predicted Mean: {np.mean(y_pred_index):.3f}')
-            ax.set_xlabel('Development Index')
-            ax.set_ylabel('Frequency')
-            ax.set_title('Development Index Distribution\n(Actual vs Predicted)')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            st.pyplot(fig)
-        
-        with col2:
-            # Regional development insights
-            st.markdown("**Dataset Insights:**")
-            st.write(f"• Total Regions Analyzed: **{len(y_index):,}**")
-            st.write(f"• Development Index Range: **{y_index.min():.3f} - {y_index.max():.3f}**")
-            st.write(f"• Mean Development Level: **{np.mean(y_index):.4f}**")
-            st.write(f"• Regional Variation (Std): **±{np.std(y_index):.4f}**")
-            
-            st.markdown("**Model Capabilities:**")
-            st.write(f"• Prediction Accuracy (R²): **{avg_r2:.4f}**")
-            st.write(f"• Clustering Quality: **{avg_silhouette:.4f}**")
-            st.write(f"• Cross-Validation Stability: **{np.std(cv_metrics['r2_scores']):.4f}**")
-            
-            # Development level distribution
-            st.markdown("**Regional Development Distribution:**")
-            for i, stat in enumerate(cluster_stats):
-                level = ['🔴 Low', '🟡 Medium-Low', '🟠 Medium-High', '🟢 High'][i]
-                st.write(f"• {level}: **{stat['percentage']:.1f}%** "
-                        f"({stat['count']:,} regions)")
-            
-            st.info("💡 **Academic Note:** This analysis demonstrates the model's ability to "
-                   "identify meaningful development patterns and provide reliable predictions "
-                   "for regional planning and policy making.")
-
-def show_training_evaluation(model, X_scaled, y_index, feature_names, cv_metrics, df):
-    """Comprehensive Training & Evaluation Analysis"""
-    st.markdown('<h2 class="sub-header">🎓 Training & Evaluation Analysis</h2>', unsafe_allow_html=True)
-    
-    st.markdown("""
-    ### 📚 Academic Training & Evaluation Framework
-    This section provides a comprehensive analysis of model training, testing using standard machine learning practices, 
-    and performance evaluation with relevant metrics including comparative analysis across different approaches.
-    """)
-    
-    # Create tabs for different evaluation aspects
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🏋️ Training Process", 
-        "📊 Performance Metrics", 
-        "🔬 Comparative Analysis", 
-        "✅ Model Validation", 
-        "📈 Goodness of Fit"
-    ])
-    
-    with tab1:
-        st.markdown("### 🏋️ Model Training Process & Standard Practices")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### Training Configuration")
-            st.info("""
-            **🔧 Training Setup:**
-            - **Algorithm**: Random Forest Regressor + K-Means Clustering
-            - **Cross-Validation**: 5-Fold Stratified CV
-            - **Random State**: 42 (Reproducibility)
-            - **Test Strategy**: Hold-out + Cross-validation
-            - **Feature Scaling**: StandardScaler normalization
-            - **Cluster Count**: K=4 (Optimized via elbow method)
-            """)
-            
-            # Training data statistics
-            st.markdown("#### Training Data Statistics")
-            training_stats = {
-                'Total Samples': len(X_scaled),
-                'Feature Count': X_scaled.shape[1],
-                'Target Variable': 'Development Index',
-                'Data Split': '5-Fold Cross-Validation',
-                'Missing Values': 'None (Preprocessed)',
-                'Data Quality': '99.1%'
-            }
-            
-            for key, value in training_stats.items():
-                st.write(f"• **{key}**: {value}")
-        
-        with col2:
-            st.markdown("#### Training Process Visualization")
-            
-            # Create a training process flowchart using plotly
-            import plotly.graph_objects as go
-            
-            fig = go.Figure()
-            
-            # Add process steps
-            steps = [
-                "Data Loading & Preprocessing",
-                "Feature Scaling (StandardScaler)",
-                "5-Fold Cross-Validation Split",
-                "Model Training (RF + K-Means)",
-                "Performance Evaluation",
-                "Final Model Training"
-            ]
-            
-            y_positions = list(range(len(steps)))[::-1]
-            
-            # Add rectangles for each step
-            for i, (step, y_pos) in enumerate(zip(steps, y_positions)):
-                fig.add_shape(
-                    type="rect",
-                    x0=0, y0=y_pos-0.3, x1=10, y1=y_pos+0.3,
-                    fillcolor="lightblue" if i % 2 == 0 else "lightgreen",
-                    opacity=0.7,
-                    line=dict(color="darkblue", width=2)
-                )
-                
-                fig.add_annotation(
-                    x=5, y=y_pos,
-                    text=f"{i+1}. {step}",
-                    showarrow=False,
-                    font=dict(size=10, color="darkblue")
-                )
-            
-            # Add arrows
-            for i in range(len(steps) - 1):
-                fig.add_annotation(
-                    x=5, y=y_positions[i] - 0.5,
-                    ax=5, ay=y_positions[i+1] + 0.5,
-                    arrowhead=2, arrowsize=1, arrowwidth=2,
-                    arrowcolor="red"
-                )
-            
-            fig.update_layout(
-                title="Training Process Flow",
-                xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                height=400,
-                margin=dict(l=20, r=20, t=40, b=20)
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Training methodology details
-        st.markdown("#### 🎯 Standard Machine Learning Practices Applied")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.success("""
-            **✅ Data Preparation:**
-            - Feature engineering & selection
-            - Outlier detection & handling
-            - Missing value imputation
-            - Data normalization (Z-score)
-            """)
-        
-        with col2:
-            st.success("""
-            **✅ Model Selection:**
-            - Hyperparameter optimization
-            - Cross-validation for model selection
-            - Ensemble methods (Random Forest)
-            - Unsupervised clustering validation
-            """)
-        
-        with col3:
-            st.success("""
-            **✅ Evaluation Strategy:**
-            - Train/validation/test splits
-            - Multiple evaluation metrics
-            - Statistical significance testing
-            - Bias-variance analysis
-            """)
-    
-    with tab2:
-        st.markdown("### 📊 Comprehensive Performance Metrics")
-        
-        # Calculate all relevant metrics
-        y_pred = model.regressor.predict(X_scaled)
+    with col6:
+        # Cluster distribution on training data
         cluster_labels = model.clusterer.predict(X_scaled)
+        unique, counts = np.unique(cluster_labels, return_counts=True)
         
-        from sklearn.metrics import (
-            mean_squared_error, mean_absolute_error, r2_score,
-            explained_variance_score, max_error, silhouette_score
-        )
+        fig, ax = plt.subplots(figsize=(6, 4))
+        bars = ax.bar([f'Group {i+1}' for i in unique], counts, color=['#ff7f7f', '#ffb347', '#87ceeb', '#98fb98'][:len(unique)])
+        ax.set_title('Cluster Distribution')
+        ax.set_xlabel('Cluster Group')
+        ax.set_ylabel('Number of Regions')
         
-        # Regression metrics
-        mse = mean_squared_error(y_index, y_pred)
-        rmse = np.sqrt(mse)
-        mae = mean_absolute_error(y_index, y_pred)
-        r2 = r2_score(y_index, y_pred)
-        explained_var = explained_variance_score(y_index, y_pred)
-        max_err = max_error(y_index, y_pred)
+        # Add value labels on bars
+        for bar, count in zip(bars, counts):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, 
+                   str(count), ha='center', va='bottom')
         
-        # Clustering metrics
-        silhouette_avg = silhouette_score(X_scaled, cluster_labels)
-        
-        # Cross-validation metrics
-        cv_r2_mean = np.mean(cv_metrics['r2_scores'])
-        cv_r2_std = np.std(cv_metrics['r2_scores'])
-        cv_mse_mean = np.mean(cv_metrics['mse_scores'])
-        cv_rmse_mean = np.sqrt(cv_mse_mean)
-        cv_silhouette_mean = np.mean(cv_metrics['silhouette_scores'])
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 🎯 Regression Metrics")
-            
-            # Create metrics table
-            regression_metrics = pd.DataFrame({
-                'Metric': [
-                    'R² Score (Coefficient of Determination)',
-                    'Root Mean Square Error (RMSE)',
-                    'Mean Absolute Error (MAE)',
-                    'Mean Squared Error (MSE)',
-                    'Explained Variance Score',
-                    'Maximum Error'
-                ],
-                'Training Set': [
-                    f"{r2:.4f}",
-                    f"{rmse:.4f}",
-                    f"{mae:.4f}",
-                    f"{mse:.6f}",
-                    f"{explained_var:.4f}",
-                    f"{max_err:.4f}"
-                ],
-                'Cross-Validation': [
-                    f"{cv_r2_mean:.4f} ± {cv_r2_std:.4f}",
-                    f"{cv_rmse_mean:.4f}",
-                    "N/A",
-                    f"{cv_mse_mean:.6f}",
-                    "N/A",
-                    "N/A"
-                ],
-                'Interpretation': [
-                    f"{r2*100:.1f}% variance explained",
-                    "Lower is better",
-                    "Lower is better",
-                    "Lower is better",
-                    f"{explained_var*100:.1f}% variance captured",
-                    "Worst case error"
-                ]
-            })
-            
-            st.dataframe(regression_metrics, use_container_width=True, hide_index=True)
-            
-            # Performance classification
-            if cv_r2_mean >= 0.8:
-                performance_level = "🟢 Excellent"
-            elif cv_r2_mean >= 0.6:
-                performance_level = "🟡 Good"
-            elif cv_r2_mean >= 0.4:
-                performance_level = "🟠 Fair"
-            else:
-                performance_level = "🔴 Poor"
-            
-            st.metric("Overall Model Performance", performance_level, 
-                     f"R² = {cv_r2_mean:.4f}")
-        
-        with col2:
-            st.markdown("#### 🔗 Clustering Metrics")
-            
-            clustering_metrics = pd.DataFrame({
-                'Metric': [
-                    'Silhouette Score',
-                    'Inertia (Within-cluster sum of squares)',
-                    'Number of Clusters',
-                    'Cluster Balance (Std of cluster sizes)',
-                    'Average Cluster Size',
-                    'Smallest Cluster Size'
-                ],
-                'Value': [
-                    f"{silhouette_avg:.4f}",
-                    f"{model.clusterer.inertia_:.2f}",
-                    f"{model.clusterer.n_clusters}",
-                    f"{np.std([np.sum(cluster_labels == i) for i in range(4)]):.1f}",
-                    f"{len(cluster_labels) / 4:.0f}",
-                    f"{min([np.sum(cluster_labels == i) for i in range(4)])}"
-                ],
-                'Interpretation': [
-                    "Higher is better (max=1.0)",
-                    "Lower is better",
-                    "Domain-specific choice",
-                    "Lower indicates balance",
-                    "Average regions per cluster",
-                    "Minimum cluster viability"
-                ]
-            })
-            
-            st.dataframe(clustering_metrics, use_container_width=True, hide_index=True)
-            
-            # Clustering quality assessment
-            if silhouette_avg >= 0.7:
-                cluster_quality = "🟢 Strong"
-            elif silhouette_avg >= 0.5:
-                cluster_quality = "🟡 Reasonable"
-            elif silhouette_avg >= 0.25:
-                cluster_quality = "🟠 Weak"
-            else:
-                cluster_quality = "🔴 Poor"
-            
-            st.metric("Clustering Quality", cluster_quality, 
-                     f"Silhouette = {silhouette_avg:.4f}")
-        
-        # Metric interpretation guide
-        st.markdown("#### 📖 Metric Interpretation Guide")
-        
-        with st.expander("📚 Understanding Performance Metrics"):
-            st.markdown("""
-            **Regression Metrics:**
-            - **R² Score**: Proportion of variance in target variable explained by model (0-1, higher better)
-            - **RMSE**: Square root of average squared differences (same units as target, lower better)
-            - **MAE**: Average absolute differences (same units as target, lower better)
-            
-            **Clustering Metrics:**
-            - **Silhouette Score**: Measure of cluster separation and cohesion (-1 to 1, higher better)
-            - **Inertia**: Sum of squared distances to cluster centers (lower better)
-            
-            **Academic Standards:**
-            - R² > 0.8: Excellent predictive power
-            - R² > 0.6: Good predictive power
-            - Silhouette > 0.5: Reasonable clustering quality
-            """)
-    
-    with tab3:
-        st.markdown("### 🔬 Comparative Analysis of Different Approaches")
-        
-        st.markdown("#### Model Comparison Framework")
-        
-        # Simulate comparison with different models (academic demonstration)
-        st.info("**Academic Note**: This section demonstrates comparative analysis methodology. "
-                "In practice, multiple models would be trained and compared.")
-        
-        # Create comparison data (simulated for demonstration)
-        comparison_data = {
-            'Model': [
-                'Random Forest + K-Means (Current)',
-                'Linear Regression + K-Means',
-                'SVR + Hierarchical Clustering',
-                'Gradient Boosting + DBSCAN',
-                'Neural Network + Gaussian Mixture'
-            ],
-            'R² Score': [cv_r2_mean, 0.6234, 0.5876, 0.7123, 0.6890],
-            'RMSE': [cv_rmse_mean, 0.4567, 0.4923, 0.3987, 0.4234],
-            'Silhouette Score': [cv_silhouette_mean, 0.3456, 0.2987, 0.4123, 0.3789],
-            'Training Time (s)': [12.3, 2.1, 45.6, 67.8, 123.4],
-            'Complexity': ['Medium', 'Low', 'High', 'High', 'Very High']
-        }
-        
-        comparison_df = pd.DataFrame(comparison_data)
-        
-        # Highlight the best performing model
-        def highlight_best(s):
-            if s.name in ['R² Score', 'Silhouette Score']:
-                is_max = s == s.max()
-            elif s.name == 'RMSE':
-                is_max = s == s.min()
-            else:
-                return [''] * len(s)
-            return ['background-color: lightgreen' if v else '' for v in is_max]
-        
-        styled_df = comparison_df.style.apply(highlight_best, axis=0)
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Performance comparison chart
-            fig, ax = plt.subplots(figsize=(10, 6))
-            
-            models = comparison_df['Model']
-            r2_scores = comparison_df['R² Score']
-            rmse_scores = comparison_df['RMSE']
-            
-            x = np.arange(len(models))
-            width = 0.35
-            
-            ax.bar(x - width/2, r2_scores, width, label='R² Score', alpha=0.8, color='skyblue')
-            ax.bar(x + width/2, rmse_scores, width, label='RMSE', alpha=0.8, color='lightcoral')
-            
-            ax.set_xlabel('Models')
-            ax.set_ylabel('Performance Score')
-            ax.set_title('Model Performance Comparison')
-            ax.set_xticks(x)
-            ax.set_xticklabels([m.split(' (')[0] for m in models], rotation=45, ha='right')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-        
-        with col2:
-            # Model selection rationale
-            st.markdown("#### 🏆 Model Selection Rationale")
-            
-            st.success("""
-            **Why Random Forest + K-Means was chosen:**
-            
-            ✅ **Best Overall Performance**
-            - Highest R² score (0.{:.0f})
-            - Competitive RMSE
-            - Good clustering quality
-            
-            ✅ **Balanced Complexity**
-            - Reasonable training time
-            - Interpretable results
-            - Robust to overfitting
-            
-            ✅ **Domain Suitability**
-            - Handles mixed data types well
-            - Provides feature importance
-            - Suitable for regional data
-            """.format(cv_r2_mean*1000))
-            
-            st.markdown("#### 📊 Trade-off Analysis")
-            st.write("• **Accuracy vs Speed**: Moderate complexity for good performance")
-            st.write("• **Interpretability vs Performance**: Balanced approach")
-            st.write("• **Generalization vs Fitting**: Cross-validation ensures generalization")
-    
-    with tab4:
-        st.markdown("### ✅ Model Validation & Robustness")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 🔄 Cross-Validation Analysis")
-            
-            # CV stability analysis
-            cv_stability = {
-                'Metric': ['R² Score', 'MSE', 'Silhouette Score'],
-                'Mean': [
-                    f"{np.mean(cv_metrics['r2_scores']):.4f}",
-                    f"{np.mean(cv_metrics['mse_scores']):.6f}",
-                    f"{np.mean(cv_metrics['silhouette_scores']):.4f}"
-                ],
-                'Std Dev': [
-                    f"{np.std(cv_metrics['r2_scores']):.4f}",
-                    f"{np.std(cv_metrics['mse_scores']):.6f}",
-                    f"{np.std(cv_metrics['silhouette_scores']):.4f}"
-                ],
-                'CV Stability': [
-                    f"{(1 - np.std(cv_metrics['r2_scores'])/np.mean(cv_metrics['r2_scores']))*100:.1f}%",
-                    f"{(1 - np.std(cv_metrics['mse_scores'])/np.mean(cv_metrics['mse_scores']))*100:.1f}%",
-                    f"{(1 - np.std(cv_metrics['silhouette_scores'])/np.mean(cv_metrics['silhouette_scores']))*100:.1f}%"
-                ]
-            }
-            
-            cv_df = pd.DataFrame(cv_stability)
-            st.dataframe(cv_df, use_container_width=True, hide_index=True)
-            
-            # Validation methodology
-            st.info("""
-            **✅ Validation Methods Applied:**
-            - 5-fold cross-validation
-            - Stratified sampling
-            - Statistical significance testing
-            - Bias-variance decomposition
-            - Out-of-sample validation
-            """)
-        
-        with col2:
-            st.markdown("#### 📈 Learning Curves Analysis")
-            
-            # Simulate learning curves (in practice, this would be computed)
-            train_sizes = np.linspace(0.1, 1.0, 10)
-            # Simulated learning curve data
-            train_scores_mean = 0.95 - 0.3 * np.exp(-5 * train_sizes)
-            val_scores_mean = 0.85 - 0.25 * np.exp(-4 * train_sizes)
-            
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.plot(train_sizes, train_scores_mean, 'o-', color='blue', label='Training Score')
-            ax.plot(train_sizes, val_scores_mean, 'o-', color='red', label='Validation Score')
-            ax.fill_between(train_sizes, train_scores_mean - 0.02, train_scores_mean + 0.02, alpha=0.1, color='blue')
-            ax.fill_between(train_sizes, val_scores_mean - 0.03, val_scores_mean + 0.03, alpha=0.1, color='red')
-            
-            ax.set_xlabel('Training Set Size (proportion)')
-            ax.set_ylabel('R² Score')
-            ax.set_title('Learning Curves')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            
-            st.pyplot(fig)
-            
-            # Overfitting analysis
-            train_val_gap = np.mean(train_scores_mean) - np.mean(val_scores_mean)
-            if train_val_gap < 0.1:
-                overfitting_status = "🟢 Low overfitting risk"
-            elif train_val_gap < 0.2:
-                overfitting_status = "🟡 Moderate overfitting"
-            else:
-                overfitting_status = "🔴 High overfitting risk"
-            
-            st.metric("Overfitting Assessment", overfitting_status, f"Gap: {train_val_gap:.3f}")
-    
-    with tab5:
-        st.markdown("### 📈 Goodness of Fit Analysis")
-        
-        st.markdown("#### Statistical Goodness of Fit Assessment")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 🎯 Residual Analysis")
-            
-            residuals = y_pred - y_index
-            
-            # Residual statistics
-            residual_stats = {
-                'Statistic': [
-                    'Mean Residual',
-                    'Std Deviation',
-                    'Skewness',
-                    'Kurtosis',
-                    'Jarque-Bera Test p-value',
-                    'Durbin-Watson Statistic'
-                ],
-                'Value': [
-                    f"{np.mean(residuals):.6f}",
-                    f"{np.std(residuals):.4f}",
-                    f"{pd.Series(residuals).skew():.4f}",
-                    f"{pd.Series(residuals).kurtosis():.4f}",
-                    "0.023 (simulated)",
-                    "1.98 (simulated)"
-                ],
-                'Interpretation': [
-                    "Close to 0 indicates unbiased",
-                    "Lower indicates better fit",
-                    "Close to 0 indicates symmetry",
-                    "Close to 0 indicates normality",
-                    "> 0.05 indicates normality",
-                    "~2.0 indicates no autocorr."
-                ]
-            }
-            
-            residual_df = pd.DataFrame(residual_stats)
-            st.dataframe(residual_df, use_container_width=True, hide_index=True)
-            
-            # Residual distribution plot
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.hist(residuals, bins=30, alpha=0.7, color='skyblue', edgecolor='black', density=True)
-            
-            # Overlay normal distribution
-            mu, sigma = np.mean(residuals), np.std(residuals)
-            x = np.linspace(residuals.min(), residuals.max(), 100)
-            normal_curve = (1/(sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
-            ax.plot(x, normal_curve, 'r-', lw=2, label='Normal Distribution')
-            
-            ax.set_xlabel('Residuals')
-            ax.set_ylabel('Density')
-            ax.set_title('Residual Distribution vs Normal')
-            ax.legend()
-            ax.grid(True, alpha=0.3)
-            
-            st.pyplot(fig)
-        
-        with col2:
-            st.markdown("#### 📊 Model Fit Quality")
-            
-            # Calculate additional fit metrics
-            ss_res = np.sum(residuals ** 2)
-            ss_tot = np.sum((y_index - np.mean(y_index)) ** 2)
-            
-            fit_metrics = {
-                'Metric': [
-                    'R² (Coefficient of Determination)',
-                    'Adjusted R²',
-                    'AIC (Akaike Information Criterion)',
-                    'BIC (Bayesian Information Criterion)',
-                    'F-statistic',
-                    'Root Mean Square Error',
-                    'Mean Absolute Percentage Error',
-                    'Symmetric MAPE'
-                ],
-                'Value': [
-                    f"{r2:.4f}",
-                    f"{1 - (1-r2)*(len(y_index)-1)/(len(y_index)-X_scaled.shape[1]-1):.4f}",
-                    f"{len(y_index) * np.log(ss_res/len(y_index)) + 2*X_scaled.shape[1]:.1f}",
-                    f"{len(y_index) * np.log(ss_res/len(y_index)) + np.log(len(y_index))*X_scaled.shape[1]:.1f}",
-                    f"{(r2/(1-r2)) * ((len(y_index)-X_scaled.shape[1]-1)/X_scaled.shape[1]):.2f}",
-                    f"{rmse:.4f}",
-                    f"{np.mean(np.abs((y_index - y_pred) / y_index)) * 100:.2f}%",
-                    f"{np.mean(np.abs((y_index - y_pred) / ((y_index + y_pred)/2))) * 100:.2f}%"
-                ],
-                'Quality Assessment': [
-                    "Excellent" if r2 > 0.8 else "Good" if r2 > 0.6 else "Fair",
-                    "Accounts for model complexity",
-                    "Lower is better",
-                    "Lower is better", 
-                    "Higher indicates significance",
-                    "Lower is better",
-                    "Lower is better",
-                    "Lower is better"
-                ]
-            }
-            
-            fit_df = pd.DataFrame(fit_metrics)
-            st.dataframe(fit_df, use_container_width=True, hide_index=True)
-            
-            # Q-Q plot for normality check
-            from scipy import stats
-            
-            fig, ax = plt.subplots(figsize=(8, 6))
-            stats.probplot(residuals, dist="norm", plot=ax)
-            ax.set_title('Q-Q Plot: Residuals vs Normal Distribution')
-            ax.grid(True, alpha=0.3)
-            
-            st.pyplot(fig)
-        
-        # Final assessment
-        st.markdown("#### 🏆 Overall Model Assessment")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if r2 >= 0.8:
-                fit_quality = "🟢 Excellent Fit"
-                fit_desc = "Model explains >80% of variance"
-            elif r2 >= 0.6:
-                fit_quality = "🟡 Good Fit"
-                fit_desc = "Model explains >60% of variance"
-            else:
-                fit_quality = "🟠 Moderate Fit"
-                fit_desc = "Model explains <60% of variance"
-            
-            st.metric("Goodness of Fit", fit_quality, fit_desc)
-        
-        with col2:
-            residual_quality = "🟢 Good" if abs(np.mean(residuals)) < 0.01 else "🟡 Acceptable"
-            st.metric("Residual Quality", residual_quality, f"Mean: {np.mean(residuals):.4f}")
-        
-        with col3:
-            stability_score = 1 - np.std(cv_metrics['r2_scores'])/np.mean(cv_metrics['r2_scores'])
-            stability_quality = "🟢 Stable" if stability_score > 0.95 else "🟡 Moderate"
-            st.metric("Model Stability", stability_quality, f"{stability_score*100:.1f}%")
-        
-        st.success("""
-        ### 🎯 Academic Summary
-        
-        **Training & Evaluation Conclusions:**
-        - Model demonstrates strong predictive performance with cross-validated R² of {:.4f}
-        - Residual analysis indicates good model fit with minimal bias
-        - Cross-validation shows consistent performance across different data splits
-        - Comparative analysis confirms optimal model selection
-        - Statistical tests validate model assumptions and reliability
-        
-        **Academic Standards Met:**
-        ✅ Rigorous cross-validation methodology
-        ✅ Comprehensive performance metrics evaluation  
-        ✅ Statistical significance testing
-        ✅ Comparative model analysis
-        ✅ Goodness of fit assessment
-        ✅ Residual analysis and model diagnostics
-        """.format(cv_r2_mean))
+        st.pyplot(fig)
 
 def show_prediction_page(model, feature_names, df):
     """Interactive prediction page"""
@@ -1784,30 +1018,9 @@ def show_regional_insights(df, model):
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        # Calculate average development index for each cluster
-        st.markdown("**📊 Cluster Development Analysis:**")
-        cluster_dev_analysis = []
         for cluster_id, count in cluster_counts.items():
-            mask = cluster_labels == cluster_id
-            avg_dev_index = df[mask]['Development_Index'].mean()
             percentage = (count / len(cluster_labels)) * 100
-            
-            cluster_dev_analysis.append({
-                'Cluster': f"Group {cluster_id + 1}",
-                'Regions': count,
-                'Percentage': f"{percentage:.1f}%",
-                'Avg Dev Index': f"{avg_dev_index:.4f}"
-            })
-        
-        # Sort by average development index to show actual ranking
-        cluster_df = pd.DataFrame(cluster_dev_analysis)
-        cluster_df['Sort Key'] = cluster_df['Avg Dev Index'].astype(float)
-        cluster_df = cluster_df.sort_values('Sort Key', ascending=False)
-        cluster_df = cluster_df.drop('Sort Key', axis=1)
-        
-        st.dataframe(cluster_df, use_container_width=True, hide_index=True)
-        
-        st.info("💡 **Note:** Clusters are ranked by actual average development index, not by group number.")
+            st.write(f"**Group {cluster_id + 1}**: {count} regions ({percentage:.1f}%)")
     
     # Top and bottom performing regions
     st.markdown("### 🏆 Regional Performance")
