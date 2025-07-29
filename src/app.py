@@ -203,6 +203,41 @@ def main():
 
 def show_home_page(df, model, X_scaled, y_index, cv_metrics):
     """Home page with project overview and methodology explanation"""
+    
+    # Add hero image at the top
+    image_paths = [
+        "assets/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
+        "../assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
+        "assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
+        "c:/Users/adaam/OneDrive/Desktop/SemesterAssignment/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp"
+    ]
+    
+    image_loaded = False
+    for image_path in image_paths:
+        try:
+            st.image(image_path, 
+                    caption="🏘️ Regional Development Analysis System", 
+                    use_column_width=True)
+            image_loaded = True
+            break
+        except:
+            continue
+    
+    if not image_loaded:
+        # Fallback banner if image can't be loaded
+        st.markdown("""
+        <div style="
+            background: linear-gradient(90deg, #1f77b4, #2e7d32);
+            padding: 2rem;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 2rem;
+        ">
+            <h1 style="color: white; margin: 0;">🏘️ Regional Development Analysis System</h1>
+            <p style="color: white; margin: 0.5rem 0 0 0;">AI-Powered Development Index Prediction & Classification</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.markdown('<h2 class="sub-header">🏘️ Regional Development Analysis System</h2>', unsafe_allow_html=True)
     
     # Project Introduction
