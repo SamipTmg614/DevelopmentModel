@@ -202,56 +202,177 @@ def main():
         show_regional_insights(df, model)
 
 def show_home_page(df, model, X_scaled, y_index, cv_metrics):
-    """Home page with overview"""
-    st.markdown('<h2 class="sub-header">📋 Project Overview</h2>', unsafe_allow_html=True)
+    """Home page with project overview and methodology explanation"""
+    st.markdown('<h2 class="sub-header">🏘️ Regional Development Analysis System</h2>', unsafe_allow_html=True)
+    
+    # Project Introduction
+    st.markdown("### 📋 About This Project")
+    st.write("""
+    This system leverages artificial intelligence to analyze and predict regional development patterns 
+    across different areas. By combining advanced machine learning techniques, we provide insights 
+    that can guide policy makers and urban planners in making data-driven decisions.
+    """)
+    
+    # How the System Works
+    st.markdown("### 🔬 How Our AI Model Works")
     
     col1, col2 = st.columns(2)
     
     with col1:
+        st.markdown("#### 🎯 **Dual-Approach Analysis**")
         st.info("""
-        **🎯 Project Goal:**
-        Predict regional development using AI algorithms combining:
-        - **Regression** (Development Index Score)
-        - **Clustering** (Regional Grouping)
-        """)
+        **🔍 Development Index Prediction (Regression):**
+        - Predicts exact development scores for regions
+        - Uses Random Forest algorithm for high accuracy
+        - Considers multiple infrastructure factors simultaneously
+        - Provides continuous numerical predictions
         
-        st.success("""
-        **🔧 Algorithms Used:**
-        - Random Forest Regressor
-        - K-Means Clustering (K=4, optimized)
+        **🏘️ Regional Classification (Clustering):**
+        - Groups regions into 4 development categories
+        - Identifies similar development patterns
+        - Uses K-Means clustering for clear groupings
+        - Enables comparative regional analysis
         """)
     
     with col2:
-        st.markdown("**📊 Dataset Statistics:**")
-        col2_1, col2_2, col2_3 = st.columns(3)
+        st.markdown("#### 🧠 **Why These Algorithms?**")
+        st.success("""
+        **🌳 Random Forest Regressor:**
+        - Handles complex, non-linear relationships
+        - Robust against overfitting
+        - Provides feature importance rankings
+        - Works well with mixed data types
+        - Ensemble method for better reliability
         
-        with col2_1:
-            st.metric("Total Regions", len(df))
-        
-        with col2_2:
-            st.metric("Features", len(df.columns) - 3)
-        
-        with col2_3:
-            st.metric("Data Quality", "99.1%")
+        **⭕ K-Means Clustering (K=4):**
+        - Creates meaningful regional groups
+        - Optimized cluster count through analysis
+        - Enables pattern recognition
+        - Facilitates policy recommendations
+        - Computationally efficient
+        """)
     
-    # Quick performance metrics from Cross-Validation
-    st.markdown('<h3 class="sub-header">⚡ Model Performance Summary (5-Fold Cross-Validation)</h3>', unsafe_allow_html=True)
-    
-    # Use cross-validation metrics instead of training metrics
-    avg_r2 = np.mean(cv_metrics['r2_scores'])
-    avg_mse = np.mean(cv_metrics['mse_scores'])
-    avg_silhouette = np.mean(cv_metrics['silhouette_scores'])
+    # What Makes It Intelligent
+    st.markdown("### 🤖 What Makes This System Intelligent?")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("R² Score", f"{avg_r2:.4f}", f"{avg_r2*100:.1f}% variance explained")
+        st.markdown("#### 📊 **Multi-Factor Analysis**")
+        st.write("""
+        - **Health Infrastructure**: Medical facilities, doctor access
+        - **Education System**: Schools, higher education access  
+        - **Public Services**: Fire brigade, library access
+        - **Transportation**: Road networks, connectivity
+        - **Social Infrastructure**: Community facilities
+        """)
     
     with col2:
-        st.metric("MSE", f"{avg_mse:.6f}", "Cross-validated error")
+        st.markdown("#### 🔄 **Dynamic Learning**")
+        st.write("""
+        - **Pattern Recognition**: Identifies development trends
+        - **Feature Importance**: Understands key factors
+        - **Cross-Validation**: Ensures reliable predictions
+        - **Adaptive Clustering**: Groups similar regions
+        - **Continuous Improvement**: Model refinement
+        """)
     
     with col3:
-        st.metric("Silhouette Score", f"{avg_silhouette:.3f}", "Clustering quality")
+        st.markdown("#### 💡 **Smart Recommendations**")
+        st.write("""
+        - **Targeted Insights**: Specific improvement areas
+        - **Evidence-Based**: Data-driven suggestions
+        - **Comparative Analysis**: Learn from similar regions
+        - **Priority Ranking**: Focus on high-impact areas
+        - **Policy Guidance**: Actionable recommendations
+        """)
+    
+    # System Capabilities
+    st.markdown("### 🚀 System Capabilities")
+    
+    capabilities_col1, capabilities_col2 = st.columns(2)
+    
+    with capabilities_col1:
+        st.markdown("#### ✨ **For Researchers & Analysts**")
+        st.write("""
+        - 📈 **Comprehensive Analytics**: Deep-dive into development patterns
+        - 🔍 **Feature Analysis**: Understand which factors matter most
+        - 📊 **Statistical Validation**: Rigorous academic methodology
+        - 🎯 **Prediction Accuracy**: Reliable forecasting capabilities
+        - 📋 **Detailed Reports**: Export-ready analysis results
+        """)
+    
+    with capabilities_col2:
+        st.markdown("#### 🏛️ **For Policy Makers & Planners**")
+        st.write("""
+        - 🎯 **Strategic Planning**: Identify development priorities
+        - 💰 **Resource Allocation**: Optimize budget distribution
+        - 📍 **Regional Comparison**: Benchmark against similar areas
+        - 🔮 **Impact Prediction**: Forecast policy outcomes
+        - 📈 **Progress Tracking**: Monitor development improvements
+        """)
+    
+    # Navigation Guide
+    st.markdown("### 🧭 How to Use This System")
+    
+    nav_col1, nav_col2 = st.columns(2)
+    
+    with nav_col1:
+        st.markdown("#### 📊 **Analysis Pages**")
+        st.write("""
+        - **📊 Model Performance**: View detailed model metrics and validation
+        - **🎓 Training & Evaluation**: Academic-level analysis and comparisons
+        - **📈 Feature Analysis**: Understand which factors drive development
+        - **🗺️ Regional Insights**: Explore geographic patterns and trends
+        """)
+    
+    with nav_col2:
+        st.markdown("#### 🔮 **Interactive Tools**")
+        st.write("""
+        - **🔮 Make Predictions**: Predict development for new regions
+        - **🔍 Search Areas**: Find and analyze specific locations
+        - **💡 Get Recommendations**: Receive targeted improvement suggestions
+        - **📋 Export Results**: Download analysis for reports
+        """)
+    
+    # Academic Foundation
+    st.markdown("### 🎓 Academic Foundation")
+    st.info("""
+    **Methodological Rigor:** This system follows standard machine learning practices including:
+    - ✅ **Cross-Validation**: 5-fold validation for reliable performance estimation
+    - ✅ **Statistical Testing**: Comprehensive metrics and significance testing  
+    - ✅ **Comparative Analysis**: Evaluation against alternative approaches
+    - ✅ **Bias-Variance Analysis**: Ensuring optimal model complexity
+    - ✅ **Feature Engineering**: Systematic approach to variable selection
+    - ✅ **Reproducibility**: Consistent results with fixed random seeds
+    
+    **Research Applications:** Suitable for academic research, policy analysis, and urban planning studies.
+    """)
+    
+    # Call to Action
+    st.markdown("### 🚀 Ready to Explore?")
+    st.success("""
+    **Start your analysis journey:**
+    - Begin with 📊 **Model Performance** to understand system capabilities
+    - Try 🔮 **Make Predictions** to test the system with your own data
+    - Explore 📈 **Feature Analysis** to see what drives regional development
+    - Use 🎓 **Training & Evaluation** for comprehensive academic analysis
+    """)
+    
+    st.markdown("---")
+    st.markdown("*Powered by AI • Built for Impact • Designed for Accuracy*")
+    
+    # Developer Credits
+    st.markdown("### 👨‍💻 Developer Information")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info("""
+        **Built by:** Samip Tamang  
+        **Email:** samiptamang5614@gmail.com  
+        **Project:** Regional Development Analysis System using Machine Learning
+        """)
+    with col2:
+        st.markdown("🏗️ **Built with:**\n- Python\n- Streamlit\n- Scikit-learn\n- Plotly")
 
 def show_model_performance(model, X_scaled, y_index, feature_names, cv_metrics):
     """Model performance analysis page"""
