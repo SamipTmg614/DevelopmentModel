@@ -205,22 +205,35 @@ def show_home_page(df, model, X_scaled, y_index, cv_metrics):
     """Home page with project overview and methodology explanation"""
     
     # Add hero image at the top
+    import os
+    
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
     image_paths = [
+        os.path.join(script_dir, "assets", "assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp"),
+        "src/assets/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
+        "./src/assets/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
         "assets/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
-        "../assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
-        "assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp",
-        "c:/Users/adaam/OneDrive/Desktop/SemesterAssignment/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp"
+        "c:/Users/adaam/OneDrive/Desktop/SemesterAssignment/src/assets/assets_task_01k1aye2tgefzrz088098azres_1753787964_img_0.webp"
     ]
     
     image_loaded = False
-    for image_path in image_paths:
+    for i, image_path in enumerate(image_paths):
         try:
-            st.image(image_path, 
-                    caption="🏘️ Regional Development Analysis System", 
-                    use_column_width=True)
-            image_loaded = True
-            break
-        except:
+            # Check if file exists before trying to load
+            if os.path.exists(image_path):
+                st.image(image_path, 
+                        caption="🏘️ Regional Development Analysis System", 
+                        use_container_width=True)
+                image_loaded = True
+                break
+            else:
+                if i == 0:  # Show debug info for first path
+                    st.write(f"🔍 Debug: File not found at: {image_path}")
+        except Exception as e:
+            if i == 0:  # Only show debug for first attempt
+                st.write(f"🔍 Debug: Error loading image: {str(e)}")
             continue
     
     if not image_loaded:
