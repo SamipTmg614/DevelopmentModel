@@ -189,7 +189,7 @@ def main():
     elif page == "🎓 Training & Evaluation":
         show_training_evaluation(model, X_scaled, y_index, feature_names, cv_metrics, df)
     
-    elif page == " Make Predictions":
+    elif page == "🔮 Make Predictions":
         show_prediction_page(model, feature_names, df)
     
     elif page == "📈 Feature Analysis":
